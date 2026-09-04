@@ -36,6 +36,10 @@ jobs:
             cc: gcc-14
             cxx: g++-14
 
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
     defaults:
       run:
         shell: bash
@@ -64,10 +68,10 @@ jobs:
           ref: v${{ env.ORTOOLS_VERSION }}
           path: or-tools
 
+      - name: Force the dependencies static
+        run: ./scripts/patch-static-deps.sh or-tools
+
       - name: Configure
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
         run: |
           cmake -S or-tools -B build -G Ninja \
             -C "${GITHUB_WORKSPACE}/ortools-options.cmake" \
@@ -79,13 +83,25 @@ jobs:
       - name: Install
         run: cmake --install build
 
+      - name: Verify nothing shared was installed
+        # The first build passed every other check and still shipped 241 shared
+        # abseil libraries: OR-Tools' own target honoured BUILD_SHARED_LIBS=OFF
+        # while its dependency build did not, and rpath hid it from the consumer
+        # check below. This is the assertion that would have caught it.
+        run: |
+          shared="$( find "${GITHUB_WORKSPACE}/install/${ASSET_NAME}" \
+            \( -name '*.so' -o -name '*.so.*' -o -name '*.dylib' -o -name '*.dll' \) -print )"
+          if [ -n "${shared}" ]; then
+            echo "error: the prefix contains shared libraries:" >&2
+            echo "${shared}" >&2
+            exit 1
+          fi
+          echo "static: no shared libraries in the prefix"
+
       - name: Collect licences and write the manifest
         run: ./scripts/package.sh "${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
 
       - name: Verify the prefix is self-contained
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
         run: |
           cmake -S consumer -B build-consumer -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \

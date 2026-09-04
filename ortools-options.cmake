@@ -9,16 +9,30 @@
 
 set( CMAKE_BUILD_TYPE Release CACHE STRING "" )
 
-# A single self-contained prefix: OR-Tools fetches and builds abseil, protobuf,
-# re2, zlib and bzip2 itself, and installs them next to itself, so the installed
-# ortoolsConfig.cmake resolves its find_dependency() calls inside the archive.
-# BUILD_DEPS is OFF upstream unless a language wrapper is enabled.
-set( BUILD_DEPS ON CACHE BOOL "" )
+# A single self-contained prefix: OR-Tools fetches and builds its dependencies
+# itself, and installs them next to itself, so the installed ortoolsConfig.cmake
+# resolves its find_dependency() calls inside the archive.
+#
+# BUILD_DEPS is deliberately left OFF and the dependencies named one by one.
+# BUILD_DEPS=ON is not a shorthand for that: it forces every BUILD_<dep> to ON
+# through CMAKE_DEPENDENT_OPTION, which drags in Eigen even with USE_PDLP=OFF --
+# a few megabytes of headers for a solver that is not built.
+set( BUILD_DEPS OFF CACHE BOOL "" )
 set( INSTALL_BUILD_DEPS ON CACHE BOOL "" )
+
+set( BUILD_ZLIB ON CACHE BOOL "" )
+set( BUILD_BZip2 ON CACHE BOOL "" )
+set( BUILD_absl ON CACHE BOOL "" )
+set( BUILD_Protobuf ON CACHE BOOL "" )
+set( BUILD_re2 ON CACHE BOOL "" )
+set( BUILD_Eigen3 OFF CACHE BOOL "" )
 
 # Static, so that a consumer needs no rpath on Unix and no DLLs on PATH for
 # ctest on Windows. This is the reason we build at all rather than taking
 # Google's prebuilt archives.
+#
+# This entry governs OR-Tools itself only: the dependency build overrides it in
+# its own directory scope, which is what scripts/patch-static-deps.sh is for.
 set( BUILD_SHARED_LIBS OFF CACHE BOOL "" )
 
 set( BUILD_CXX ON CACHE BOOL "" )

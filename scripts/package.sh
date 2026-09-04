@@ -23,19 +23,27 @@ copyLicence()
       return 0
     fi
   done
-  echo "warning: no licence file found for ${name}" >&2
   return 1
 }
 
-copyLicence "${source_dir}" or-tools
+missing=""
 
-# Everything OR-Tools fetched and built for itself under BUILD_DEPS=ON is
-# installed into the same prefix, so its licence has to travel with it.
+copyLicence "${source_dir}" or-tools || missing="${missing} or-tools"
+
+# Everything OR-Tools fetched and built for itself is installed into the same
+# prefix, so its licence has to travel with it.
 for dir in "${build_dir}"/_deps/*-src; do
   [ -d "${dir}" ] || continue
   name="$( basename "${dir}" )"
-  copyLicence "${dir}" "${name%-src}" || true
+  copyLicence "${dir}" "${name%-src}" || missing="${missing} ${name%-src}"
 done
+
+# An archive that ships a binary without its licence is not redistributable, so
+# this is a build failure and not a warning.
+if [ -n "${missing}" ]; then
+  echo "error: no licence file found for:${missing}" >&2
+  exit 1
+fi
 
 {
   echo "OR-Tools static build for NGA"
@@ -47,6 +55,10 @@ done
   echo "workflow-run:    ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-laoo/nga-deps}/actions/runs/${GITHUB_RUN_ID:-unknown}"
   echo "cmake:           $( cmake --version | head -1 )"
   echo "compiler:        $( "${CXX:-c++}" --version 2>/dev/null | head -1 || echo "${CXX:-unknown}" )"
+  echo
+  echo "== Local modifications to the upstream tree =="
+  echo
+  git -C "${source_dir}" --no-pager diff
   echo
   echo "== CMake initial cache =="
   echo
