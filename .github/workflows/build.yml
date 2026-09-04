@@ -1,0 +1,138 @@
+name: Build OR-Tools
+
+# A tag is the trigger, because the point of this repository is that a published
+# binary is traceable to something written down. workflow_dispatch exists too,
+# but it only builds and uploads a workflow artifact -- it never publishes a
+# Release, so nothing untraceable can escape.
+
+on:
+  push:
+    tags: [ 'or-tools-*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OR-Tools version to build (dry run, publishes no Release)'
+        required: true
+        default: '9.15'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The matrix mirrors NGA's own CI, because that is what fixes the ABI.
+          # The compiler is in the asset name only on Linux, the one platform
+          # where the C++ runtime is not the platform's own.
+          - platform: linux-x64-gcc14
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version="${GITHUB_REF_NAME#or-tools-}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          echo "ORTOOLS_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "ASSET_NAME=or-tools-${version}-${{ matrix.platform }}" >> "$GITHUB_ENV"
+
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+
+      - name: Check out OR-Tools
+        uses: actions/checkout@v5
+        with:
+          repository: google/or-tools
+          ref: v${{ env.ORTOOLS_VERSION }}
+          path: or-tools
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S or-tools -B build -G Ninja \
+            -C "${GITHUB_WORKSPACE}/ortools-options.cmake" \
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Install
+        run: cmake --install build
+
+      - name: Collect licences and write the manifest
+        run: ./scripts/package.sh "${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
+
+      - name: Verify the prefix is self-contained
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S consumer -B build-consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
+          cmake --build build-consumer
+          ./build-consumer/consumer
+
+      - name: Archive
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ( cd install && 7z a -tzip "${GITHUB_WORKSPACE}/${ASSET_NAME}.zip" "${ASSET_NAME}" )
+          else
+            tar -czf "${ASSET_NAME}.tar.gz" -C install "${ASSET_NAME}"
+          fi
+          ls -l "${ASSET_NAME}".*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ env.ASSET_NAME }}.*
+          if-no-files-found: error
+
+  release:
+    name: Publish the Release
+    needs: build
+    if: startsWith( github.ref, 'refs/tags/or-tools-' )
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Static OR-Tools builds for NGA. See each archive's MANIFEST for the exact upstream commit and CMake configuration." \
+            assets/*
