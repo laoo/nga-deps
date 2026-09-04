@@ -26,6 +26,14 @@ set( BUILD_BZip2 ON CACHE BOOL "" )
 set( BUILD_absl ON CACHE BOOL "" )
 set( BUILD_Protobuf ON CACHE BOOL "" )
 set( BUILD_re2 ON CACHE BOOL "" )
+
+# bzip2 does not look at BUILD_SHARED_LIBS at all -- it has its own pair of
+# options, shared on and static off, and OR-Tools' patch aliases BZip2::BZip2 to
+# whichever target exists. The names are generic enough to reach another
+# dependency, which is survivable only because the list above is short and none
+# of the others declares them.
+set( ENABLE_SHARED_LIB OFF CACHE BOOL "" )
+set( ENABLE_STATIC_LIB ON CACHE BOOL "" )
 # Eigen is not optional, whatever the solver flags say: cmake/check_deps.cmake
 # demands the Eigen3::Eigen target unconditionally, and configuration fails
 # without it even with USE_PDLP=OFF. Headers only, MPL2.

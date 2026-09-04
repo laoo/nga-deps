@@ -58,6 +58,17 @@ fi
   echo "cmake:           $( cmake --version | head -1 )"
   echo "compiler:        $( "${CXX:-c++}" --version 2>/dev/null | head -1 || echo "${CXX:-unknown}" )"
   echo
+  echo "== Dependency commits =="
+  echo
+  # Not decoration: OR-Tools fetches bzip2 from GIT_TAG "master", so one
+  # OR-Tools tag does not pin one set of sources. This is the only record of
+  # what actually went into a given archive.
+  for dir in "${build_dir}"/_deps/*-src; do
+    [ -d "${dir}" ] || continue
+    name="$( basename "${dir}" )"
+    printf '%-12s %s\n' "${name%-src}" "$( git -C "${dir}" rev-parse HEAD 2>/dev/null || echo unknown )"
+  done
+  echo
   echo "== Local modifications to the upstream tree =="
   echo
   git -C "${source_dir}" --no-pager diff
