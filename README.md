@@ -22,10 +22,20 @@ A Release named after the tag carries one archive per platform, plus
 | Asset | Runner | Toolchain |
 |---|---|---|
 | `or-tools-<version>-linux-x64-gcc14.tar.gz` | `ubuntu-24.04` | g++-14 |
+| `or-tools-<version>-macos-arm64.tar.gz` | `macos-latest` | Apple clang, deployment target 13.0 |
+| `or-tools-<version>-windows-x64-msvc2022.zip` | `windows-latest` | MSVC 2022, Release, `/MD` |
 
 The matrix mirrors NGA's own CI, because that is what fixes the ABI. The
 compiler appears in the asset name only on Linux, the one platform where the C++
 runtime is not the platform's own.
+
+The archives are static all the way down, which took some doing: OR-Tools is
+tested upstream as a shared build, so `scripts/patch-static-deps.sh` overrides
+the two lines that force its dependencies shared whatever the cache says, and
+`scripts/package.sh` repairs what a static bzip2 leaves inconsistent in the
+installed CMake package. Both are checked rather than assumed -- the workflow
+fails if a shared library reaches the prefix, and `consumer/` is configured
+against the finished prefix and nothing else.
 
 Each archive contains a `MANIFEST` — upstream tag and commit, build date, runner
 image, the exact CMake cache, and what was actually installed — and a

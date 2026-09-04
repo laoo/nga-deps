@@ -35,6 +35,23 @@ jobs:
             os: ubuntu-24.04
             cc: gcc-14
             cxx: g++-14
+            generator: Ninja
+
+          - platform: macos-arm64
+            os: macos-latest
+            generator: Ninja
+            # Pinned rather than left to the runner: without it the archive
+            # silently inherits whatever macOS built it.
+            extra: -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+
+          - platform: windows-x64-msvc2022
+            os: windows-latest
+            # The Visual Studio generator rather than Ninja, so that no step has
+            # to arrange an MSVC environment for a bash shell.
+            generator: Visual Studio 17 2022
+            config: --config Release
+            # Every configuration /MD, so that NGA's Release build links.
+            extra: -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
 
     env:
       CC: ${{ matrix.cc }}
@@ -47,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Resolve version
+      - name: Resolve version and paths
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             version="${GITHUB_REF_NAME#or-tools-}"
@@ -57,9 +74,22 @@ jobs:
           echo "ORTOOLS_VERSION=${version}" >> "$GITHUB_ENV"
           echo "ASSET_NAME=or-tools-${version}-${{ matrix.platform }}" >> "$GITHUB_ENV"
 
+          # GITHUB_WORKSPACE is a backslash path on Windows, which CMake tolerates
+          # and find, cp and the rest of these steps do not. cygpath -m gives one
+          # form both understand.
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            echo "WS=$( cygpath -m "${GITHUB_WORKSPACE}" )" >> "$GITHUB_ENV"
+          else
+            echo "WS=${GITHUB_WORKSPACE}" >> "$GITHUB_ENV"
+          fi
+
       - name: Install toolchain (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
 
       - name: Check out OR-Tools
         uses: actions/checkout@v5
@@ -73,15 +103,16 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -S or-tools -B build -G Ninja \
-            -C "${GITHUB_WORKSPACE}/ortools-options.cmake" \
-            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
+          cmake -S or-tools -B build -G "${{ matrix.generator }}" \
+            -C "${WS}/ortools-options.cmake" \
+            -DCMAKE_INSTALL_PREFIX="${WS}/install/${ASSET_NAME}" \
+            ${{ matrix.extra }}
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build ${{ matrix.config }} --parallel
 
       - name: Install
-        run: cmake --install build
+        run: cmake --install build ${{ matrix.config }}
 
       - name: Verify nothing shared was installed
         # The first build passed every other check and still shipped 241 shared
@@ -89,7 +120,7 @@ jobs:
         # while its dependency build did not, and rpath hid it from the consumer
         # check below. This is the assertion that would have caught it.
         run: |
-          shared="$( find "${GITHUB_WORKSPACE}/install/${ASSET_NAME}" \
+          shared="$( find "${WS}/install/${ASSET_NAME}" \
             \( -name '*.so' -o -name '*.so.*' -o -name '*.dylib' -o -name '*.dll' \) -print )"
           if [ -n "${shared}" ]; then
             echo "error: the prefix contains shared libraries:" >&2
@@ -99,24 +130,28 @@ jobs:
           echo "static: no shared libraries in the prefix"
 
       - name: Collect licences and write the manifest
-        run: ./scripts/package.sh "${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
+        run: ./scripts/package.sh "${WS}/install/${ASSET_NAME}"
 
       - name: Verify the prefix is self-contained
         run: |
-          cmake -S consumer -B build-consumer -G Ninja \
+          cmake -S consumer -B build-consumer -G "${{ matrix.generator }}" \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install/${ASSET_NAME}"
-          cmake --build build-consumer
-          ./build-consumer/consumer
+            -DCMAKE_PREFIX_PATH="${WS}/install/${ASSET_NAME}" \
+            ${{ matrix.extra }}
+          cmake --build build-consumer ${{ matrix.config }} --parallel
+          # The executable sits in a configuration subdirectory under the Visual
+          # Studio generator and directly in the build directory under Ninja.
+          "$( find build-consumer \( -name consumer -o -name consumer.exe \) -type f | head -1 )"
 
       - name: Archive
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            ( cd install && 7z a -tzip "${GITHUB_WORKSPACE}/${ASSET_NAME}.zip" "${ASSET_NAME}" )
+          cd install
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            7z a -tzip "${WS}/${ASSET_NAME}.zip" "${ASSET_NAME}"
           else
-            tar -czf "${ASSET_NAME}.tar.gz" -C install "${ASSET_NAME}"
+            tar -czf "${WS}/${ASSET_NAME}.tar.gz" "${ASSET_NAME}"
           fi
-          ls -l "${ASSET_NAME}".*
+          ls -l "${WS}/${ASSET_NAME}".*
 
       - uses: actions/upload-artifact@v4
         with:

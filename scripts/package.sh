@@ -55,6 +55,20 @@ copyLicences()
   [ "${found}" = 1 ]
 }
 
+# Taken from what CMake detected rather than from CXX --version: the three
+# platforms then report the same way, and Windows has no cl.exe on PATH here.
+compilerDescription()
+{
+  local file
+  file="$( ls "${build_dir}"/CMakeFiles/*/CMakeCXXCompiler.cmake 2>/dev/null | head -1 )"
+  if [ -z "${file}" ]; then
+    echo unknown
+    return
+  fi
+  echo "$( sed -n 's/^set(CMAKE_CXX_COMPILER_ID "\(.*\)")$/\1/p' "${file}" )" \
+       "$( sed -n 's/^set(CMAKE_CXX_COMPILER_VERSION "\(.*\)")$/\1/p' "${file}" )"
+}
+
 missing=""
 
 copyLicences "${source_dir}" or-tools || missing="${missing} or-tools"
@@ -83,7 +97,8 @@ fi
   echo "runner-image:    ${ImageOS:-unknown} ${ImageVersion:-}"
   echo "workflow-run:    ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-laoo/nga-deps}/actions/runs/${GITHUB_RUN_ID:-unknown}"
   echo "cmake:           $( cmake --version | head -1 )"
-  echo "compiler:        $( "${CXX:-c++}" --version 2>/dev/null | head -1 || echo "${CXX:-unknown}" )"
+  echo "generator:       $( sed -n 's/^CMAKE_GENERATOR:INTERNAL=//p' "${build_dir}/CMakeCache.txt" )"
+  echo "compiler:        $( compilerDescription )"
   echo
   echo "== Dependency commits =="
   echo
