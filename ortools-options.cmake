@@ -67,7 +67,15 @@ set( USE_SCIP OFF CACHE BOOL "" )
 set( USE_COINOR OFF CACHE BOOL "" )
 set( USE_HIGHS OFF CACHE BOOL "" )
 set( USE_PDLP OFF CACHE BOOL "" )
-set( USE_GUROBI OFF CACHE BOOL "" )
 set( USE_XPRESS OFF CACHE BOOL "" )
 set( USE_GLPK OFF CACHE BOOL "" )
 set( USE_CPLEX OFF CACHE BOOL "" )
+
+# USE_GUROBI stays at its default ON, which is not a preference. Unlike SCIP,
+# HiGHS and PDLP, whose call sites in model_builder_helper.cc sit behind
+# #if defined(USE_...), the two Gurobi calls are unguarded: USE_GUROBI=OFF drops
+# the sources that define GurobiIsCorrectlyInstalled and GurobiSolveProto while
+# leaving the references, and OR-Tools' own executables then fail to link. It
+# costs nothing but a few source files -- Gurobi is loaded dynamically if it
+# happens to be installed, so there is no build-time dependency and nothing to
+# ship.
