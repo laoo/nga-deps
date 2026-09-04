@@ -23,7 +23,7 @@ A Release named after the tag carries one archive per platform, plus
 |---|---|---|
 | `or-tools-<version>-linux-x64-gcc14.tar.gz` | `ubuntu-24.04` | g++-14 |
 | `or-tools-<version>-macos-arm64.tar.gz` | `macos-latest` | Apple clang, deployment target 13.0 |
-| `or-tools-<version>-windows-x64-msvc2022.zip` | `windows-latest` | MSVC 2022, Release, `/MD` |
+| `or-tools-<version>-windows-x64-msvc.zip` | `windows-latest` | whichever MSVC the image has, Release, `/MD` |
 
 The matrix mirrors NGA's own CI, because that is what fixes the ABI. The
 compiler appears in the asset name only on Linux, the one platform where the C++

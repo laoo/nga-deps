@@ -35,20 +35,25 @@ jobs:
             os: ubuntu-24.04
             cc: gcc-14
             cxx: g++-14
-            generator: Ninja
+            generator: -G Ninja
 
           - platform: macos-arm64
             os: macos-latest
-            generator: Ninja
+            generator: -G Ninja
             # Pinned rather than left to the runner: without it the archive
             # silently inherits whatever macOS built it.
             extra: -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
 
-          - platform: windows-x64-msvc2022
+          - platform: windows-x64-msvc
             os: windows-latest
-            # The Visual Studio generator rather than Ninja, so that no step has
-            # to arrange an MSVC environment for a bash shell.
-            generator: Visual Studio 17 2022
+            # No generator named, for the same reason NGA's own windows preset
+            # names none: windows-latest is the windows-2025-vs2026 image today
+            # and was VS 2022 yesterday, so asking for a version is asking to be
+            # broken by the runner. CMake picks the Visual Studio that is there,
+            # and the MANIFEST records which one it was. That is also why the
+            # asset name carries no year -- unlike Linux, the C++ runtime here is
+            # the platform's own.
+            generator:
             config: --config Release
             # Every configuration /MD, so that NGA's Release build links.
             extra: -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
@@ -103,7 +108,7 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -S or-tools -B build -G "${{ matrix.generator }}" \
+          cmake -S or-tools -B build ${{ matrix.generator }} \
             -C "${WS}/ortools-options.cmake" \
             -DCMAKE_INSTALL_PREFIX="${WS}/install/${ASSET_NAME}" \
             ${{ matrix.extra }}
@@ -134,7 +139,7 @@ jobs:
 
       - name: Verify the prefix is self-contained
         run: |
-          cmake -S consumer -B build-consumer -G "${{ matrix.generator }}" \
+          cmake -S consumer -B build-consumer ${{ matrix.generator }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${WS}/install/${ASSET_NAME}" \
             ${{ matrix.extra }}
