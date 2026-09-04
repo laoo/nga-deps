@@ -23,6 +23,22 @@ while IFS= read -r file; do
   echo "bzip2: added ${file/_static/} for FindBZip2"
 done < <( find "${prefix}" -name '*bz2_static*' -type f )
 
+# The other end of the same knot: OR-Tools links bzip2's own target, so the
+# exported ortoolsTargets.cmake refers to BZip2::bz2_static, which only
+# bzip2Targets.cmake defines and nothing includes -- find_dependency( BZip2 )
+# went through the module and created BZip2::BZip2 instead. With a shared bzip2
+# the two names coincided and the mismatch stayed invisible. Point the export at
+# the target the module really creates.
+rewritten=0
+for file in "${prefix}"/lib/cmake/ortools/*.cmake; do
+  [ -f "${file}" ] || continue
+  grep -q 'BZip2::bz2_static' "${file}" || continue
+  awk '{ gsub( /BZip2::bz2_static/, "BZip2::BZip2" ); print }' "${file}" > "${file}.rewritten"
+  mv "${file}.rewritten" "${file}"
+  rewritten=$(( rewritten + 1 ))
+done
+echo "bzip2: pointed ${rewritten} exported OR-Tools target file(s) at BZip2::BZip2"
+
 mkdir -p "${prefix}/licenses"
 
 # Every licence file the tree has, not the first one found: Eigen carries six
