@@ -12,6 +12,17 @@ prefix="${1:?usage: package.sh <prefix>}"
 source_dir="${SOURCE_DIR:-or-tools}"
 build_dir="${BUILD_DIR:-build}"
 
+# ortoolsConfig.cmake does find_dependency( BZip2 ), which resolves through
+# CMake's FindBZip2 module -- config mode never gets a chance, and bzip2 installs
+# no package config anyway. The module looks for a library named bz2, while the
+# static build installs bz2_static. bzip2's own CMakeLists is fetched during
+# configure, far too late for patch-static-deps.sh to rename the output, so the
+# name the module expects is added here instead.
+while IFS= read -r file; do
+  cp "${file}" "${file/_static/}"
+  echo "bzip2: added ${file/_static/} for FindBZip2"
+done < <( find "${prefix}" -name '*bz2_static*' -type f )
+
 mkdir -p "${prefix}/licenses"
 
 # Every licence file the tree has, not the first one found: Eigen carries six
