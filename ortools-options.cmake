@@ -51,7 +51,6 @@ set( BUILD_CXX ON CACHE BOOL "" )
 
 # Nothing here is a library NGA links against.
 set( BUILD_FLATZINC OFF CACHE BOOL "" )
-set( BUILD_MATH_OPT OFF CACHE BOOL "" )
 set( BUILD_SAMPLES OFF CACHE BOOL "" )
 set( BUILD_EXAMPLES OFF CACHE BOOL "" )
 set( BUILD_TESTING OFF CACHE BOOL "" )
@@ -71,11 +70,17 @@ set( USE_XPRESS OFF CACHE BOOL "" )
 set( USE_GLPK OFF CACHE BOOL "" )
 set( USE_CPLEX OFF CACHE BOOL "" )
 
-# USE_GUROBI stays at its default ON, which is not a preference. Unlike SCIP,
-# HiGHS and PDLP, whose call sites in model_builder_helper.cc sit behind
-# #if defined(USE_...), the two Gurobi calls are unguarded: USE_GUROBI=OFF drops
-# the sources that define GurobiIsCorrectlyInstalled and GurobiSolveProto while
-# leaving the references, and OR-Tools' own executables then fail to link. It
-# costs nothing but a few source files -- Gurobi is loaded dynamically if it
-# happens to be installed, so there is no build-time dependency and nothing to
-# ship.
+# USE_GUROBI and BUILD_MATH_OPT stay at their default ON, and neither is a
+# preference -- the two are chained.
+#
+# Unlike SCIP, HiGHS and PDLP, whose call sites in model_builder_helper.cc sit
+# behind #if defined(USE_...), the two Gurobi calls are unguarded. USE_GUROBI=OFF
+# drops the sources defining GurobiIsCorrectlyInstalled and GurobiSolveProto and
+# leaves the references, and OR-Tools' own executables -- which are not optional,
+# they are add_executable() with install() rules -- then fail to link. It costs
+# nothing but source files: Gurobi is loaded dynamically if it happens to be
+# installed, so there is no build-time dependency and nothing to ship.
+#
+# ortools_gurobi in turn links ortools::math_opt_proto, which BUILD_MATH_OPT=OFF
+# removes, so MathOpt has to stay too. Neither reaches NGA's binary: the archive
+# is static, so the linker takes only the objects that are referenced.
