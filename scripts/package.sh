@@ -14,28 +14,30 @@ build_dir="${BUILD_DIR:-build}"
 
 mkdir -p "${prefix}/licenses"
 
-copyLicence()
+# Every licence file the tree has, not the first one found: Eigen carries six
+# COPYING.* files and a COPYING.README that says which of them applies.
+copyLicences()
 {
-  local dir="$1" name="$2" file
-  for file in LICENSE LICENSE.txt LICENSE.md LICENCE COPYING COPYING.txt COPYRIGHT; do
-    if [ -f "${dir}/${file}" ]; then
-      cp "${dir}/${file}" "${prefix}/licenses/${name}-LICENSE"
-      return 0
-    fi
+  local dir="$1" name="$2" file found=0
+  for file in "${dir}"/LICENSE* "${dir}"/LICENCE* "${dir}"/COPYING* "${dir}"/NOTICE*; do
+    [ -f "${file}" ] || continue
+    mkdir -p "${prefix}/licenses/${name}"
+    cp "${file}" "${prefix}/licenses/${name}/"
+    found=1
   done
-  return 1
+  [ "${found}" = 1 ]
 }
 
 missing=""
 
-copyLicence "${source_dir}" or-tools || missing="${missing} or-tools"
+copyLicences "${source_dir}" or-tools || missing="${missing} or-tools"
 
 # Everything OR-Tools fetched and built for itself is installed into the same
 # prefix, so its licence has to travel with it.
 for dir in "${build_dir}"/_deps/*-src; do
   [ -d "${dir}" ] || continue
   name="$( basename "${dir}" )"
-  copyLicence "${dir}" "${name%-src}" || missing="${missing} ${name%-src}"
+  copyLicences "${dir}" "${name%-src}" || missing="${missing} ${name%-src}"
 done
 
 # An archive that ships a binary without its licence is not redistributable, so

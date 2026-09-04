@@ -15,8 +15,9 @@ set( CMAKE_BUILD_TYPE Release CACHE STRING "" )
 #
 # BUILD_DEPS is deliberately left OFF and the dependencies named one by one.
 # BUILD_DEPS=ON is not a shorthand for that: it forces every BUILD_<dep> to ON
-# through CMAKE_DEPENDENT_OPTION, which drags in Eigen even with USE_PDLP=OFF --
-# a few megabytes of headers for a solver that is not built.
+# through CMAKE_DEPENDENT_OPTION, so the set of things in the archive would be
+# whatever upstream decides to force next, and this file would not say what is
+# in it.
 set( BUILD_DEPS OFF CACHE BOOL "" )
 set( INSTALL_BUILD_DEPS ON CACHE BOOL "" )
 
@@ -25,7 +26,10 @@ set( BUILD_BZip2 ON CACHE BOOL "" )
 set( BUILD_absl ON CACHE BOOL "" )
 set( BUILD_Protobuf ON CACHE BOOL "" )
 set( BUILD_re2 ON CACHE BOOL "" )
-set( BUILD_Eigen3 OFF CACHE BOOL "" )
+# Eigen is not optional, whatever the solver flags say: cmake/check_deps.cmake
+# demands the Eigen3::Eigen target unconditionally, and configuration fails
+# without it even with USE_PDLP=OFF. Headers only, MPL2.
+set( BUILD_Eigen3 ON CACHE BOOL "" )
 
 # Static, so that a consumer needs no rpath on Unix and no DLLs on PATH for
 # ctest on Windows. This is the reason we build at all rather than taking
